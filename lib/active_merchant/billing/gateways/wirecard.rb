@@ -153,10 +153,10 @@ module ActiveMerchant #:nodoc:
             case options[:action]
             when :preauthorization, :purchase
               add_invoice(xml, money, options)
-              if options[:credit_card]
-                add_creditcard(xml, options[:credit_card])
-              else
+              if options[:recurring] == 'Repeated'
                 xml.tag! 'GuWID', options[:preauthorization]
+              else
+                add_creditcard(xml, options[:credit_card])
               end
               add_address(xml, options[:billing_address])
             when :capture, :bookback
@@ -320,4 +320,3 @@ module ActiveMerchant #:nodoc:
     end
   end
 end
-
