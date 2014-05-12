@@ -67,6 +67,19 @@ class WirecardTest < Test::Unit::TestCase
     assert reference_purchase.message[/this is a demo/i]
   end
 
+  def test_successful_repeat_purchase
+    @gateway.expects(:ssl_post).returns(successful_purchase_response)
+    assert response = @gateway.purchase(@amount, @credit_card, @options)
+    assert_success response
+    assert_equal TEST_PURCHASE_GUWID, response.authorization
+
+    @gateway.expects(:ssl_post).returns(successful_repeat_purchase_response)
+    assert response = @gateway.purchase(@amount, response.authorization, @options)
+    assert_success response
+    assert response.test?
+    assert response.message[/this is a demo/i]
+  end
+
   def test_wrong_credit_card_authorization
     @gateway.expects(:ssl_post).returns(wrong_creditcard_authorization_response)
     assert response = @gateway.authorize(@amount, @declined_card, @options)
@@ -337,7 +350,11 @@ class WirecardTest < Test::Unit::TestCase
     XML
   end
 
+<<<<<<< HEAD
   def successful_reference_purchase_response
+=======
+  def successful_repeat_purchase_response
+>>>>>>> Add repeat purchase tests
     <<-XML
     <?xml version="1.0" encoding="UTF-8"?>
     <WIRECARD_BXML xmlns:xsi="http://www.w3.org/1999/XMLSchema-instance" xsi:noNamespaceSchemaLocation="wirecard.xsd">
