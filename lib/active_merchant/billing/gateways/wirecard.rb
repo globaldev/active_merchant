@@ -54,11 +54,12 @@ module ActiveMerchant #:nodoc:
         commit(:capture, money, options)
       end
 
-      def purchase(money, payment_method, options = {})
-        if payment_method.respond_to?(:number)
-          options[:credit_card] = payment_method
+      def purchase(money, creditcard_or_authorization, options = {})
+        if creditcard_or_authorization.is_a?(String)
+          options[:preauthorization] = creditcard_or_authorization
+          options[:recurring] = 'Repeated'
         else
-          options[:preauthorization] = payment_method
+          options[:credit_card] = creditcard_or_authorization
         end
         commit(:purchase, money, options)
       end
