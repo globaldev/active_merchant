@@ -108,7 +108,7 @@ module ActiveMerchant #:nodoc:
           :test => test?,
           :authorization => authorization,
           :avs_result => { :code => response[:avsCode] },
-          :cvv_result => response[:cvCode]
+          :cvv_result => response[:CVCResponseCode]
         )
       rescue ResponseError => e
         if e.response.code == "401"
