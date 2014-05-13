@@ -107,7 +107,7 @@ module ActiveMerchant #:nodoc:
         Response.new(success, message, response,
           :test => test?,
           :authorization => authorization,
-          :avs_result => { :code => response[:avsCode] },
+          :avs_result => { :code => response[:AVS] },
           :cvv_result => response[:CVCResponseCode]
         )
       rescue ResponseError => e
@@ -254,6 +254,10 @@ module ActiveMerchant #:nodoc:
 
           status.elements.to_a.each do |node|
             response[node.name.to_sym] = (node.text || '').strip
+          end
+
+          if avs = status.elements['AVS']
+            response[:AVS] = avs.elements['ProviderResultCode'].text
           end
 
           error_code = REXML::XPath.first(status, "ERROR/Number")
