@@ -44,8 +44,12 @@ module ActiveMerchant #:nodoc:
         super
       end
 
-      def authorize(money, creditcard, options = {})
-        options[:credit_card] = creditcard
+      def authorize(money, payment_method, options = {})
+        if payment_method.respond_to?(:number)
+          options[:credit_card] = payment_method
+        else
+          options[:preauthorization] = payment_method
+        end
         commit(:preauthorization, money, options)
       end
 
