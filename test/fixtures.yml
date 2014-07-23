@@ -24,6 +24,12 @@ authorize_net:
   login: X
   password: Y
 
+axcessms:
+  sender: sender
+  login: login
+  password: password
+  channel: channel
+
 # Working credentials, no need to replace
 balanced:
   login: 'e1c5ad38d1c711e1b36c026ba7e239a9'
