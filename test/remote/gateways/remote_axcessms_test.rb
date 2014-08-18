@@ -150,9 +150,8 @@ class RemoteAxcessmsTest < Test::Unit::TestCase
   end
 
   def test_invalid_login
-    f = Marshal.load(Marshal.dump(@gateway.auth_data))
-    f[:password] << "11"
-    response = AxcessmsGateway.new(f).purchase(@amount, @credit_card, @options)
+    credentials = fixtures(:axcessms).merge(password: "invalid")
+    response = AxcessmsGateway.new(credentials).purchase(@amount, @credit_card, @options)
     assert_failure response
   end
 end

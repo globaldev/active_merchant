@@ -15,12 +15,9 @@ module ActiveMerchant #:nodoc:
       self.money_format = :dollars
       self.default_currency = "EUR"
 
-      attr_reader :auth_data
-
       def initialize(options={})
         requires!(options, :sender, :login, :password, :channel)
         super
-        @auth_data = options
       end
 
       def purchase(money, credit_card, options={})
@@ -95,10 +92,10 @@ module ActiveMerchant #:nodoc:
       end
 
       def add_authentication(post)
-        post["SECURITY.SENDER"] = @auth_data[:sender]
-        post["USER.LOGIN"] = @auth_data[:login]
-        post["USER.PWD"] = @auth_data[:password]
-        post["TRANSACTION.CHANNEL"] = @auth_data[:channel]
+        post["SECURITY.SENDER"] = options[:sender]
+        post["USER.LOGIN"] = options[:login]
+        post["USER.PWD"] = options[:password]
+        post["TRANSACTION.CHANNEL"] = options[:channel]
       end
 
       def add_payment(money, post)
