@@ -21,73 +21,56 @@ module ActiveMerchant #:nodoc:
       end
 
       def purchase(money, payment, options={})
-        if payment.respond_to?(:number)
-          options[:credit_card] = payment
-        else
-          options[:authorization] = payment
-        end
-        commit("CC.DB", money, options)
+        commit("CC.DB", money, payment, options)
       end
 
       def authorize(money, payment, options={})
-        if payment.respond_to?(:number)
-          options[:credit_card] = payment
-        else
-          options[:authorization] = payment
-        end
-        commit("CC.PA", money, options)
+        commit("CC.PA", money, payment, options)
       end
 
       def capture(money, authorization, options={})
-        options[:authorization] = authorization
-        commit("CC.CP", money, options)
+        commit("CC.CP", money, authorization, options)
       end
 
       def refund(money, authorization, options={})
-        options[:authorization] = authorization
-        commit("CC.RF", money, options)
+        commit("CC.RF", money, authorization, options)
       end
 
       def void(authorization, options={})
-        options[:authorization] = authorization
-        commit("CC.RV", nil, options)
+        commit("CC.RV", nil, authorization, options)
       end
 
       private
 
-      def commit(paymentcode, money, options)
-        request = build_request(paymentcode, money, options)
+      def commit(paymentcode, money, payment, options)
+        request = build_request(paymentcode, money, payment, options)
         headers = {
           "Content-Type" => "application/x-www-form-urlencoded; charset=UTF-8",
           "Accept-Encoding" => "identity;q=0;"
         }
 
-        raw_response = ssl_post((test? ? test_url : live_url), post_data(request), headers)
+        response = parse(ssl_post(test? ? test_url : live_url, request.to_post_data, headers))
 
-        parsed = Hash[CGI.unescape(raw_response).scan(/([^=]+)=([^&]+)[&$]/)]
-
-        Response.new(success?(parsed), response_message(parsed), parsed,
-          :authorization => parsed["IDENTIFICATION.UNIQUEID"],
-          :test => test?
+        Response.new(success?(response), response_message(response), response,
+          :authorization => response["IDENTIFICATION.UNIQUEID"],
+          :test => (response["TRANSACTION.MODE"] != "LIVE")
         )
       end
 
-      def build_request(paymentcode, money, options)
-        post = {}
+      def build_request(paymentcode, money, payment, options)
+        post = PostData.new
         post["PAYMENT.CODE"] = paymentcode
         add_authentication(post)
         add_transaction(post, options)
-        if options[:authorization]
-          add_authorization(money, post, options)
-        else
-          requires!(options, :credit_card)
-          add_account(post, options)
-          add_payment(money, post, options)
-          add_customer_data(post, options)
+
+        add_presentation(money, post, options)
+        add_payment(post, payment)
+        add_memo(post, options)
+
+        if payment.respond_to?(:number)
+          add_customer_data(post, payment, options)
           add_address(post, options)
         end
-        add_contact(post, options)
-        add_memo(post, options)
 
         post
       end
@@ -100,36 +83,37 @@ module ActiveMerchant #:nodoc:
       end
 
       def add_transaction(post, options)
-        post["TRANSACTION.MODE"] = options[:transaction_mode] || "INTEGRATOR_TEST"
+        post["TRANSACTION.MODE"] = options[:transaction_mode] || (test? ? "INTEGRATOR_TEST" : "LIVE")
         post["TRANSACTION.RESPONSE"] = "SYNC"
       end
 
-      def add_authorization(money, post, options)
-        post["PRESENTATION.AMOUNT"] = amount(money)
-        post["PRESENTATION.CURRENCY"] = options[:currency] || currency(money)
-        post["IDENTIFICATION.TRANSACTIONID"] = options[:order_id]
-        post["IDENTIFICATION.REFERENCEID"] = options[:authorization]
-        post["IDENTIFICATION.UNIQUEID"] = nil
-        post["IDENTIFICATION.SHORTID"] = nil
-      end
-
-      def add_account(post, options)
-        post["ACCOUNT.HOLDER"] = "#{options[:credit_card].first_name} #{options[:credit_card].last_name}"
-        post["ACCOUNT.NUMBER"] = options[:credit_card].number
-        post["ACCOUNT.EXPIRY_MONTH"] = format(options[:credit_card].month, :two_digit)
-        post["ACCOUNT.EXPIRY_YEAR"] = format(options[:credit_card].year, :four_digit)
-        post["ACCOUNT.VERIFICATION"] = options[:credit_card].verification_value
-      end
-
-      def add_payment(money, post, options)
+      def add_presentation(money, post, options)
         post["PRESENTATION.AMOUNT"] = amount(money)
         post["PRESENTATION.CURRENCY"] = options[:currency] || currency(money)
         post["PRESENTATION.USAGE"] = options[:soft_descriptor]
+        post["IDENTIFICATION.TRANSACTIONID"] = options[:transaction_id] || generate_unique_id
+        post["IDENTIFICATION.INVOICEID"] = options[:order_id]
+        post["IDENTIFICATION.SHOPPERID"] = options[:customer]
+        post["IDENTIFICATION.BULKID"] = options[:bulk_id]
       end
 
-      def add_customer_data(post, options)
-        post["NAME.GIVEN"] = options[:credit_card].first_name
-        post["NAME.FAMILY"] = options[:credit_card].last_name
+      def add_payment(post, payment)
+        if payment.respond_to?(:number)
+          post["ACCOUNT.HOLDER"] = payment.name
+          post["ACCOUNT.NUMBER"] = payment.number
+          post["ACCOUNT.EXPIRY_MONTH"] = format(payment.month, :two_digit)
+          post["ACCOUNT.EXPIRY_YEAR"] = format(payment.year, :four_digit)
+          post["ACCOUNT.VERIFICATION"] = payment.verification_value
+        else
+          post["IDENTIFICATION.REFERENCEID"] = payment
+        end
+      end
+
+      def add_customer_data(post, payment, options)
+        post["CONTACT.EMAIL"] = options[:email]
+        post["CONTACT.IP"] = options[:ip]
+        post["NAME.GIVEN"] = payment.first_name
+        post["NAME.FAMILY"] = payment.last_name
       end
 
       def add_address(post, options)
@@ -139,13 +123,8 @@ module ActiveMerchant #:nodoc:
           post["ADDRESS.ZIP"] = address[:zip]
           post["ADDRESS.CITY"] = address[:city]
           post["ADDRESS.STATE"] = address[:state]
-          post["ADDRESS.COUNTRY"]= address[:country]
+          post["ADDRESS.COUNTRY"] = address[:country]
         end
-      end
-
-      def add_contact(post, options)
-        post["CONTACT.EMAIL"] = options[:email]
-        post["CONTACT.IP"] = options[:ip]
       end
 
       def add_memo(post, options)
@@ -162,13 +141,9 @@ module ActiveMerchant #:nodoc:
           parsed_response["PROCESSING.REASON"]  + " - " + parsed_response["PROCESSING.RETURN"]
       end
 
-      def post_data(params)
-        return nil unless params
-
-        no_blanks = params.reject { |key, value| value.blank? }
-        no_blanks.map { |key, value| "#{key}=#{CGI.escape(value.to_s)}" }.join("&")
+      def parse(raw_response)
+        Hash[CGI.unescape(raw_response).scan(/([^=]+)=([^&]+)[&$]/)]
       end
-
     end
   end
 end
