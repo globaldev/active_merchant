@@ -4,32 +4,34 @@ class AxcessmsTest < Test::Unit::TestCase
 
   SUCCESS_MESSAGES = {
     "CONNECTOR_TEST" => "Successful Processing - Request successfully processed in 'Merchant in Connector Test Mode'",
-    "INTEGRATOR_TEST" => "Successful Processing - Request successfully processed in 'Merchant in Integrator Test Mode'",
+    "INTEGRATOR_TEST" => "Successful Processing - Request successfully processed in 'Merchant in Integrator Test Mode'"
   }
 
   SUCCESS_CODES = {
     "CONNECTOR_TEST" => "000.100.112",
-    "INTEGRATOR_TEST" => "000.100.112",
+    "INTEGRATOR_TEST" => "000.100.112"
   }
 
   def setup
     @gateway = AxcessmsGateway.new(fixtures(:axcessms))
 
-    @credit_card = credit_card(4200000000000000, month: 05, year: 2022)
+    @amount = 150
+    @credit_card = credit_card("4200000000000000", month: 05, year: 2022)
     @declined_card = credit_card("4444444444444444", month: 05, year: 2022)
     @modemsg = "Integrator"
     @mode = @modemsg.upcase + "_TEST"
-    @amount = 150
 
-    @options["TRANSACTION.MODE"] = @mode
-    @options["PRESENTATION.USAGE"] = "Order Number #{Time.now.to_f.divmod(2473)[1]}"
-    @options["IDENTIFICATION.TRANSACTIONID"] = "Ruby-RemoteTest #{Time.now.to_f * 100}"
-    @options[:address] = {
-      :street => "Leopoldstr. 1",
-      :zip => "80798",
-      :city => "Munich",
-      :state => "BY",
-      :country => "DE",
+    @options = {
+      order_id: generate_unique_id,
+      email: "customer@example.com",
+      description: "Order Number #{Time.now.to_f.divmod(2473)[1]}",
+      address: {
+        :address1 => "Leopoldstr. 1",
+        :zip => "80798",
+        :city => "Munich",
+        :state => "BY",
+        :country => "DE"
+      }
     }
   end
 
@@ -43,7 +45,7 @@ class AxcessmsTest < Test::Unit::TestCase
     assert purchase.test?
 
     @gateway.expects(:ssl_post).returns("TRANSACTION.CHANNEL=8a8294174725bf9a01472662d87a0169&PRESENTATION.CURRENCY=EUR&IDENTIFICATION.UNIQUEID=8a82944a476cb2ab01476daee1527b47&PAYMENT.CODE=CC.RF&FRONTEND.CC_LOGO=images%2Fvisa_mc.gif&PROCESSING.STATUS=REJECTED_VALIDATION&CONTACT.IP=188.98.221.45&FRONTEND.MODE=DEFAULT&FRONTEND.REQUEST.CANCELLED=false&PROCESSING.RETURN=invalid+reference+id&PROCESSING.REASON=Format+Error&PROCESSING.STATUS.CODE=70&TRANSACTION.MODE=INTEGRATOR_TEST&POST.VALIDATION=ACK&PROCESSING.TIMESTAMP=2014-07-25+13%3A21%3A23&PROCESSING.RETURN.CODE=100.300.300&RESPONSE.VERSION=1.0&IDENTIFICATION.REFERENCEID=8a829449476cab6601476daede017bec&TRANSACTION.RESPONSE=SYNC&P3.VALIDATION=ACK&PROCESSING.CODE=CC.RF.70.20&FRONTEND.SESSION_ID=&PROCESSING.REASON.CODE=20&IDENTIFICATION.SHORTID=2537.4237.5586&NAME.SALUTATION=NONE&PROCESSING.RESULT=NOK&IDENTIFICATION.TRANSACTIONID=Ruby-RemoteTest+140629448198.16507&PRESENTATION.AMOUNT=1.50&ADDRESS.COUNTRY=DE")
-    response = @gateway.refund(nil, purchase.authorization)
+    response = @gateway.refund(@amount, purchase.authorization)
     assert_failure response
   end
 
@@ -107,13 +109,7 @@ class AxcessmsTest < Test::Unit::TestCase
     assert_success response
 
     @gateway.expects(:ssl_post).returns("P3.VALIDATION=ACK&CLEARING.DESCRIPTOR=0905.5878.4162+activeMerchant+Order+Number+1724.1255989074707&PROCESSING.CONNECTORDETAIL.ConnectorTxID3=26K00001&PROCESSING.CONNECTORDETAIL.ConnectorTxID1=266565&TRANSACTION.CHANNEL=channel&PROCESSING.REASON.CODE=00&PROCESSING.CODE=CC.RF.90.00&FRONTEND.REQUEST.CANCELLED=false&PROCESSING.REASON=Successful+Processing&FRONTEND.MODE=DEFAULT&CLEARING.FXSOURCE=INTERN&CLEARING.AMOUNT=1.00&PROCESSING.RESULT=ACK&NAME.SALUTATION=NONE&POST.VALIDATION=ACK&CLEARING.CURRENCY=EUR&FRONTEND.SESSION_ID=&PROCESSING.STATUS.CODE=90&PRESENTATION.CURRENCY=EUR&PAYMENT.CODE=CC.RF&PROCESSING.RETURN.CODE=000.100.112&CONTACT.IP=94.216.212.194&IDENTIFICATION.REFERENCEID=8a8294494763d786014766f58b4b3d2d&PROCESSING.STATUS=NEW&PRESENTATION.AMOUNT=1.00&FRONTEND.CC_LOGO=images%2Fvisa_mc.gif&IDENTIFICATION.UNIQUEID=8a8294494763d786014766f58efd3d3c&IDENTIFICATION.TRANSACTIONID=Ruby-RemoteTest+140618167312.56226&IDENTIFICATION.SHORTID=0905.5878.4162&CLEARING.FXRATE=1.0&PROCESSING.TIMESTAMP=2014-07-24+06%3A01%3A14&ADDRESS.COUNTRY=DE&RESPONSE.VERSION=1.0&TRANSACTION.MODE=#{@mode}&TRANSACTION.RESPONSE=SYNC&PROCESSING.RETURN=Request+successfully+processed+in+%27Merchant+in+#{@modemsg}+Test+Mode%27&CLEARING.FXDATE=2014-07-24+06%3A01%3A14")
-    response = @gateway.refund(nil, {
-      "IDENTIFICATION.UNIQUEID" =>  "8a8294494763d786014766f58b4b3d2d",
-      "IDENTIFICATION.SHORTID" => "5028.7564.4578",
-      "PRESENTATION.AMOUNT" => "1.50",
-      "PRESENTATION.CURRENCY" => "EUR",
-      "IDENTIFICATION.TRANSACTIONID"  => "Ruby-RemoteTest 140614364124.39487",
-    })
+    response = @gateway.refund(@amount, response.authorization)
     assert_success response
 
     assert_equal SUCCESS_MESSAGES[@mode], response.message

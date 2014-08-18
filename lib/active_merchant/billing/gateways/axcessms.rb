@@ -20,13 +20,21 @@ module ActiveMerchant #:nodoc:
         super
       end
 
-      def purchase(money, credit_card, options={})
-        options[:credit_card] = credit_card
+      def purchase(money, payment, options={})
+        if payment.respond_to?(:number)
+          options[:credit_card] = payment
+        else
+          options[:authorization] = payment
+        end
         commit("CC.DB", money, options)
       end
 
-      def authorize(money, credit_card, options={})
-        options[:credit_card] = credit_card
+      def authorize(money, payment, options={})
+        if payment.respond_to?(:number)
+          options[:credit_card] = payment
+        else
+          options[:authorization] = payment
+        end
         commit("CC.PA", money, options)
       end
 
@@ -59,35 +67,28 @@ module ActiveMerchant #:nodoc:
         parsed = Hash[CGI.unescape(raw_response).scan(/([^=]+)=([^&]+)[&$]/)]
 
         Response.new(success?(parsed), response_message(parsed), parsed,
-          :authorization => extract_authorization(parsed),
-          :test => (parsed["TRANSACTION.MODE"] != "LIVE")
+          :authorization => parsed["IDENTIFICATION.UNIQUEID"],
+          :test => test?
         )
       end
 
       def build_request(paymentcode, money, options)
-        post = Marshal.load(Marshal.dump(options))
+        post = {}
         post["PAYMENT.CODE"] = paymentcode
         add_authentication(post)
-        add_transaction(post)
+        add_transaction(post, options)
         if options[:authorization]
-          add_authorization(money, post)
+          add_authorization(money, post, options)
         else
-          requires!(post, :credit_card)
-          add_account(post)
-          add_payment(money, post)
-          add_customer_data(post)
-          add_address(post)
+          requires!(options, :credit_card)
+          add_account(post, options)
+          add_payment(money, post, options)
+          add_customer_data(post, options)
+          add_address(post, options)
         end
+        add_contact(post, options)
+        add_memo(post, options)
 
-        clean(post)
-      end
-
-      def clean(post)
-        post.delete(:credit_card)
-        post.delete(:ruby)
-        post.delete(:address)
-        post.delete(:billing_address)
-        post.delete(:authorization)
         post
       end
 
@@ -98,70 +99,67 @@ module ActiveMerchant #:nodoc:
         post["TRANSACTION.CHANNEL"] = options[:channel]
       end
 
-      def add_payment(money, post)
-        post["PRESENTATION.AMOUNT"] = amount(money)
-        post["PRESENTATION.CURRENCY"] = post[:currency] || currency(money) || @default_currency
-        post["PRESENTATION.USAGE"] = post[:order_id] || post[:invoice] || post["PRESENTATION.USAGE"]
+      def add_transaction(post, options)
+        post["TRANSACTION.MODE"] = options[:transaction_mode] || "INTEGRATOR_TEST"
+        post["TRANSACTION.RESPONSE"] = "SYNC"
       end
 
-      def add_authorization(money, post)
-        post["PRESENTATION.AMOUNT"] = amount(money) || post[:authorization]["PRESENTATION.AMOUNT"]
-        post["PRESENTATION.CURRENCY"] = currency(money) || post[:authorization]["PRESENTATION.CURRENCY"]
-        post["IDENTIFICATION.REFERENCEID"] = post["IDENTIFICATION.UNIQUEID"] || post[:authorization]["IDENTIFICATION.UNIQUEID"]
+      def add_authorization(money, post, options)
+        post["PRESENTATION.AMOUNT"] = amount(money)
+        post["PRESENTATION.CURRENCY"] = options[:currency] || currency(money)
+        post["IDENTIFICATION.TRANSACTIONID"] = options[:order_id]
+        post["IDENTIFICATION.REFERENCEID"] = options[:authorization]
         post["IDENTIFICATION.UNIQUEID"] = nil
         post["IDENTIFICATION.SHORTID"] = nil
       end
 
-      def add_customer_data(post)
-        post["NAME.GIVEN"] = post[:credit_card].first_name
-        post["NAME.FAMILY"] = post[:credit_card].last_name
+      def add_account(post, options)
+        post["ACCOUNT.HOLDER"] = "#{options[:credit_card].first_name} #{options[:credit_card].last_name}"
+        post["ACCOUNT.NUMBER"] = options[:credit_card].number
+        post["ACCOUNT.EXPIRY_MONTH"] = format(options[:credit_card].month, :two_digit)
+        post["ACCOUNT.EXPIRY_YEAR"] = format(options[:credit_card].year, :four_digit)
+        post["ACCOUNT.VERIFICATION"] = options[:credit_card].verification_value
       end
 
-      def add_address(post)
-        address = post[:billing_address] || post[:address]
+      def add_payment(money, post, options)
+        post["PRESENTATION.AMOUNT"] = amount(money)
+        post["PRESENTATION.CURRENCY"] = options[:currency] || currency(money)
+        post["PRESENTATION.USAGE"] = options[:soft_descriptor]
+      end
+
+      def add_customer_data(post, options)
+        post["NAME.GIVEN"] = options[:credit_card].first_name
+        post["NAME.FAMILY"] = options[:credit_card].last_name
+      end
+
+      def add_address(post, options)
+        address = options[:billing_address] || options[:address]
         if !address.nil?
-          post["ADDRESS.STREET"]=address[:street]
-          post["ADDRESS.ZIP"]=address[:zip]
-          post["ADDRESS.CITY"]=address[:city]
-          post["ADDRESS.STATE"]=address[:state]
-          post["ADDRESS.COUNTRY"]=address[:country]
+          post["ADDRESS.STREET"] = address.values_at(:address1, :address2).reject(&:blank?).join(" ")
+          post["ADDRESS.ZIP"] = address[:zip]
+          post["ADDRESS.CITY"] = address[:city]
+          post["ADDRESS.STATE"] = address[:state]
+          post["ADDRESS.COUNTRY"]= address[:country]
         end
       end
 
-      def add_account(post)
-        post["ACCOUNT.HOLDER"] = "#{post[:credit_card].first_name} #{post[:credit_card].last_name}"
-        post["ACCOUNT.NUMBER"] = post[:credit_card].number
-        post["ACCOUNT.EXPIRY_MONTH"] = sprintf("%.2i", post[:credit_card].month)
-        post["ACCOUNT.EXPIRY_YEAR"] = sprintf("%.4i", post[:credit_card].year)
-        post["ACCOUNT.VERIFICATION"] = post[:credit_card].verification_value
+      def add_contact(post, options)
+        post["CONTACT.EMAIL"] = options[:email]
+        post["CONTACT.IP"] = options[:ip]
       end
 
-      def add_transaction(post)
-        if post["TRANSACTION.MODE"].nil?
-          post["TRANSACTION.MODE"] = "INTEGRATOR_TEST"
-        end
-        post["TRANSACTION.RESPONSE"] = "SYNC"
+      def add_memo(post, options)
+        post["PAYMENT.MEMO"] = options[:description]
       end
 
       def success?(response)
-        response["PROCESSING.RETURN.CODE"] != nil ? response["PROCESSING.RETURN.CODE"][0..2] =="000" : false;
+        response["PROCESSING.RETURN.CODE"] != nil ? response["PROCESSING.RETURN.CODE"][0..2] =="000" : false
       end
 
       def response_message(parsed_response)
         parsed_response["PROCESSING.REASON"].nil? ?
           parsed_response["PROCESSING.RETURN"] :
           parsed_response["PROCESSING.REASON"]  + " - " + parsed_response["PROCESSING.RETURN"]
-      end
-
-      def extract_authorization(parsed)
-        {
-          "IDENTIFICATION.UNIQUEID" => parsed["IDENTIFICATION.UNIQUEID"],
-          "IDENTIFICATION.SHORTID" => parsed["IDENTIFICATION.SHORTID"],
-          "PRESENTATION.AMOUNT" => parsed["PRESENTATION.AMOUNT"],
-          "PRESENTATION.CURRENCY" => parsed["PRESENTATION.CURRENCY"],
-          "IDENTIFICATION.TRANSACTIONID" => parsed["IDENTIFICATION.TRANSACTIONID"],
-          "TRANSACTION.MODE" => parsed["TRANSACTION.MODE"],
-        }
       end
 
       def post_data(params)
