@@ -142,7 +142,11 @@ module ActiveMerchant #:nodoc:
       end
 
       def parse(raw_response)
-        Hash[CGI.unescape(raw_response).scan(/([^=]+)=([^&]+)[&$]/)]
+        Hash[
+          raw_response.split('&').map do |kvp|
+            kvp.split('=').map{|value| CGI.unescape(value) }
+          end
+        ]
       end
     end
   end
