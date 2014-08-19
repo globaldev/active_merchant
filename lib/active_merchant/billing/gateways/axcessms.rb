@@ -21,11 +21,12 @@ module ActiveMerchant #:nodoc:
       end
 
       def purchase(money, payment, options={})
-        commit("CC.DB", money, payment, options)
+        paymentcode = payment.respond_to?(:number) ? "CC.DB" : "CC.RB"
+        commit(paymentcode, money, payment, options)
       end
 
-      def authorize(money, payment, options={})
-        commit("CC.PA", money, payment, options)
+      def authorize(money, authorization, options={})
+        commit("CC.PA", money, authorization, options)
       end
 
       def capture(money, authorization, options={})
