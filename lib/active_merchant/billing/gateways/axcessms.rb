@@ -120,7 +120,7 @@ module ActiveMerchant #:nodoc:
       def add_address(post, options)
         address = options[:billing_address] || options[:address]
         if !address.nil?
-          post["ADDRESS.STREET"] = address.values_at(:address1, :address2).reject(&:blank?).join(" ")
+          post["ADDRESS.STREET"] = "#{address[:address1]} #{address[:address2]}".strip
           post["ADDRESS.ZIP"] = address[:zip]
           post["ADDRESS.CITY"] = address[:city]
           post["ADDRESS.STATE"] = address[:state]
@@ -133,13 +133,11 @@ module ActiveMerchant #:nodoc:
       end
 
       def success?(response)
-        response["PROCESSING.RETURN.CODE"] != nil ? response["PROCESSING.RETURN.CODE"][0..2] =="000" : false
+        response["PROCESSING.RESULT"] == "ACK"
       end
 
-      def response_message(parsed_response)
-        parsed_response["PROCESSING.REASON"].nil? ?
-          parsed_response["PROCESSING.RETURN"] :
-          parsed_response["PROCESSING.REASON"]  + " - " + parsed_response["PROCESSING.RETURN"]
+      def response_message(response)
+        "#{response["PROCESSING.REASON"]} - #{response["PROCESSING.RETURN"]}"
       end
 
       def parse(raw_response)
