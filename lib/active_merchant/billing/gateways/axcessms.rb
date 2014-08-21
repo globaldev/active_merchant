@@ -13,7 +13,16 @@ module ActiveMerchant #:nodoc:
       self.homepage_url = "http://www.axcessms.com/"
       self.display_name = "Axcessms Gateway"
       self.money_format = :dollars
-      self.default_currency = "EUR"
+      self.default_currency = "GBP"
+
+      API_VERSION = "1.0"
+      PAYMENT_CODE_PREAUTHORIZATION = "CC.PA"
+      PAYMENT_CODE_DEBIT = "CC.DB"
+      PAYMENT_CODE_CAPTURE = "CC.CP"
+      PAYMENT_CODE_REVERSAL = "CC.RV"
+      PAYMENT_CODE_REFUND = "CC.RF"
+      PAYMENT_CODE_REBILL = "CC.RB"
+
 
       def initialize(options={})
         requires!(options, :sender, :login, :password, :channel)
@@ -21,24 +30,24 @@ module ActiveMerchant #:nodoc:
       end
 
       def purchase(money, payment, options={})
-        paymentcode = payment.respond_to?(:number) ? "CC.DB" : "CC.RB"
-        commit(paymentcode, money, payment, options)
+        payment_code = payment.respond_to?(:number) ? PAYMENT_CODE_DEBIT : PAYMENT_CODE_REBILL
+        commit(payment_code, money, payment, options)
       end
 
       def authorize(money, authorization, options={})
-        commit("CC.PA", money, authorization, options)
+        commit(PAYMENT_CODE_PREAUTHORIZATION, money, authorization, options)
       end
 
       def capture(money, authorization, options={})
-        commit("CC.CP", money, authorization, options)
+        commit(PAYMENT_CODE_CAPTURE, money, authorization, options)
       end
 
       def refund(money, authorization, options={})
-        commit("CC.RF", money, authorization, options)
+        commit(PAYMENT_CODE_REFUND, money, authorization, options)
       end
 
       def void(authorization, options={})
-        commit("CC.RV", nil, authorization, options)
+        commit(PAYMENT_CODE_REVERSAL, nil, authorization, options)
       end
 
       private
@@ -58,9 +67,12 @@ module ActiveMerchant #:nodoc:
         )
       end
 
-      def build_request(paymentcode, money, payment, options)
+      def build_request(payment_code, money, payment, options)
         post = PostData.new
-        post["PAYMENT.CODE"] = paymentcode
+
+        post["REQUEST.VERSION"] = API_VERSION
+        post["PAYMENT.CODE"] = payment_code
+
         add_authentication(post)
         add_transaction(post, options)
 
@@ -102,6 +114,7 @@ module ActiveMerchant #:nodoc:
         if payment.respond_to?(:number)
           post["ACCOUNT.HOLDER"] = payment.name
           post["ACCOUNT.NUMBER"] = payment.number
+          post["ACCOUNT.BRAND"] = payment.brand
           post["ACCOUNT.EXPIRY_MONTH"] = format(payment.month, :two_digit)
           post["ACCOUNT.EXPIRY_YEAR"] = format(payment.year, :four_digit)
           post["ACCOUNT.VERIFICATION"] = payment.verification_value
@@ -120,6 +133,9 @@ module ActiveMerchant #:nodoc:
       def add_address(post, options)
         address = options[:billing_address] || options[:address]
         if !address.nil?
+          post["NAME.COMPANY"] = address[:company]
+          post["CONTACT.PHONE"] = address[:phone]
+          post["CONTACT.MOBILE"] = address[:mobile_phone]
           post["ADDRESS.STREET"] = "#{address[:address1]} #{address[:address2]}".strip
           post["ADDRESS.ZIP"] = address[:zip]
           post["ADDRESS.CITY"] = address[:city]
