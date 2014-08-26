@@ -13,7 +13,7 @@ class RemoteAxcessmsTest < Test::Unit::TestCase
     @amount = 150
     @credit_card = credit_card("4200000000000000", month: 05, year: 2022)
     @declined_card = credit_card("4444444444444444", month: 05, year: 2022)
-    @mode = "INTEGRATOR_TEST"
+    @mode = "CONNECTOR_TEST"
 
     @options = {
       order_id: generate_unique_id,

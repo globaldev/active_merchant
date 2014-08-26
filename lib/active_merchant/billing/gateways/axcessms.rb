@@ -96,7 +96,7 @@ module ActiveMerchant #:nodoc:
       end
 
       def add_transaction(post, options)
-        post["TRANSACTION.MODE"] = options[:transaction_mode] || (test? ? "INTEGRATOR_TEST" : "LIVE")
+        post["TRANSACTION.MODE"] = options[:transaction_mode] || (test? ? "CONNECTOR_TEST" : "LIVE")
         post["TRANSACTION.RESPONSE"] = "SYNC"
       end
 
@@ -158,7 +158,7 @@ module ActiveMerchant #:nodoc:
 
       def parse(raw_response)
         Hash[
-          raw_response.split('&').map do |kvp|
+          raw_response.strip.split('&').map do |kvp|
             kvp.split('=').map{|value| CGI.unescape(value) }
           end
         ]

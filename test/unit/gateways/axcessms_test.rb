@@ -18,7 +18,7 @@ class AxcessmsTest < Test::Unit::TestCase
     @amount = 150
     @credit_card = credit_card("4200000000000000", month: 05, year: 2022)
     @declined_card = credit_card("4444444444444444", month: 05, year: 2022)
-    @modemsg = "Integrator"
+    @modemsg = "Connector"
     @mode = @modemsg.upcase + "_TEST"
 
     @options = {
