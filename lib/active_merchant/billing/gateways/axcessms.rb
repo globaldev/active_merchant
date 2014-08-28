@@ -4,6 +4,11 @@ module ActiveMerchant #:nodoc:
       self.test_url = "https://test.ctpe.net/frontend/payment.prc"
       self.live_url = "https://ctpe.net/frontend/payment.prc"
 
+      class_attribute :test_xml_url
+      class_attribute :live_xml_url
+      self.test_xml_url = "https://test.ctpe.io/payment/ctpe"
+      self.live_xml_url = "https://ctpe.io/payment/ctpe"
+
       self.supported_countries = %w(AD AT BE BG BR CA CH CY CZ DE DK EE ES FI FO FR GB
                                     GI GR HR HU IE IL IM IS IT LI LT LU LV MC MT MX NL
                                     NO PL PT RO RU SE SI SK TR US VA)
@@ -59,7 +64,28 @@ module ActiveMerchant #:nodoc:
           "Accept-Encoding" => "identity;q=0;"
         }
 
-        response = parse(ssl_post(test? ? test_url : live_url, request.to_post_data, headers))
+        url = if test?
+          if options[:xml]
+            test_xml_url
+          else
+            test_url
+          end
+        else
+          if options[:xml]
+            live_xml_url
+          else
+            live_url
+          end
+        end
+
+        response = parse(
+          ssl_post(
+            url,
+            (options[:xml] ? "load=#{request}" : request.to_post_data),
+            headers
+          ),
+          options
+        )
 
         Response.new(success?(response), response_message(response), response,
           :authorization => response["IDENTIFICATION.UNIQUEID"],
@@ -156,12 +182,17 @@ module ActiveMerchant #:nodoc:
         "#{response["PROCESSING.REASON"]} - #{response["PROCESSING.RETURN"]}"
       end
 
-      def parse(raw_response)
-        Hash[
-          raw_response.strip.split('&').map do |kvp|
-            kvp.split('=').map{|value| CGI.unescape(value) }
-          end
-        ]
+
+      def parse(raw_response, options)
+        if options[:xml]
+          # FIXME: Parse XML element
+        else
+          Hash[
+            raw_response.strip.split('&').map do |kvp|
+              kvp.split('=').map{|value| CGI.unescape(value) }
+            end
+          ]
+        end
       end
     end
   end
